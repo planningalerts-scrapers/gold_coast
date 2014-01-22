@@ -1,3 +1,4 @@
+require 'scraperwiki'
 require 'mechanize'
 
 starting_url = 'http://pdonline.goldcoast.qld.gov.au/masterview/modules/ApplicationMaster/default.aspx?page=found&1=thismonth&4a=BLD%27,%27MCU%27,%27OPW%27,%27ROL&6=F'
@@ -24,7 +25,7 @@ def scrape_table(doc, comment_url)
       'date_scraped' => Date.today.to_s
     }
     
-    if (ScraperWiki.select("* from swdata where `council_reference`='#{record['council_reference']}'").empty? rescue true)
+    if (ScraperWiki.select("* from data where `council_reference`='#{record['council_reference']}'").empty? rescue true)
       ScraperWiki.save_sqlite(['council_reference'], record)
     else
       puts "Skipping already saved record " + record['council_reference']
