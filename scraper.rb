@@ -3,7 +3,7 @@ require 'scraperwiki'
 
 # This is using the ePathway system.
 
-class WollongongScraper
+class GoldCoastScraper
   attr_reader :agent
 
   def initialize
@@ -23,7 +23,7 @@ class WollongongScraper
 
   # The main url for the planning system which can be reached directly without getting a stupid session timed out error
   def enquiry_url
-    "http://epathway.wollongong.nsw.gov.au/ePathway/Production/Web/GeneralEnquiry/EnquiryLists.aspx"
+    "https://cogc.cloud.infor.com/ePathway/epthprod/Web/GeneralEnquiry/EnquiryLists.aspx?ModuleCode=LAP"
   end
 
   # Returns a list of URLs for all the applications on exhibition
@@ -31,8 +31,8 @@ class WollongongScraper
     # Get the main page and ask for the list of DAs on exhibition
     page = agent.get(enquiry_url)
     form = page.forms.first
-    form.radiobuttons[0].click
-    page = form.submit(form.button_with(:value => /Save and Continue/))
+    form.radiobuttons[1].click
+    page = form.submit(form.button_with(:value => /Next/))
 
     page_label = page.at('#ctl00_MainBodyContent_mPagingControl_pageNumberLabel')
     if page_label.nil?
@@ -47,7 +47,7 @@ class WollongongScraper
     (1..number_of_pages).each do |page_no|
       # Don't refetch the first page
       if page_no > 1
-        page = agent.get("http://epathway.wollongong.nsw.gov.au/ePathway/Production/Web/GeneralEnquiry/EnquirySummaryView.aspx?PageNumber=#{page_no}")
+        page = agent.get("https://cogc.cloud.infor.com/ePathway/epthprod/Web/GeneralEnquiry/EnquirySummaryView.aspx?PageNumber=#{page_no}")
       end
       # Get a list of urls on this page
       urls += extract_urls_from_page(page)
@@ -59,29 +59,27 @@ class WollongongScraper
     urls.map do |url|
       # Get application page with a referrer or we get an error page
       page = agent.get(url, [], URI.parse(enquiry_url))
+      results = page.at('.GroupContentPanel').search('div.field')
 
-      results = page.search('#ctl00_MainBodyContent_group_122').search('div.field')
+      council_reference = results.at('span[contains("Application number")]').next.text
+      date_received     = Date.strptime(results.at('span[contains("Lodgement date")]').next.text, '%d/%m/%Y').to_s
+      description       = results.at('span[contains("Application description")]').next.text
 
-      council_reference = results.search('span[contains("Application Number")] ~ td').text
-      date_received     = Date.strptime(results.search('span[contains("Lodgement Date")] ~ td').text, '%d/%m/%Y').to_s
-      description       = results.search('span[contains("Proposal")] ~ td').text
-
-      address = page.search('#ctl00_MainBodyContent_group_124').search('tr.ContentPanel').search('span.ContentText')[0].text.strip
-
+      address = results.at('span[contains("Application location")]').next.text
+      # Throw away the first part of the address which contains lot number
+      address = address.split(", ")[1..-1].join(", ")
       record = {
         "council_reference" => council_reference,
         "address" => address,
         "description" => description,
         "info_url" => enquiry_url,
-        "comment_url" => 'mailto:council@wollongong.nsw.gov.au',
         "date_scraped" => Date.today.to_s,
         "date_received" => date_received
       }
-      #p record
       puts "Saving record " + record['council_reference'] + " - " + record['address']
       ScraperWiki.save_sqlite(['council_reference'], record)
     end
   end
 end
 
-WollongongScraper.new.applications
+GoldCoastScraper.new.applications
