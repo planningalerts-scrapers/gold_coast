@@ -1,75 +1,87 @@
+require "mechanize"
 require 'scraperwiki'
-require 'mechanize'
 
-case ENV['MORPH_PERIOD']
-when 'thismonth'
-  period = 'thismonth'
-when 'lastmonth'
-  period = 'lastmonth'
-else
-  period = 'thisweek'
-end
-puts "Getting '" + period + "' data, changable via MORPH_PERIOD environment";
+# This is using the ePathway system.
 
-starting_url = 'http://pdonline.goldcoast.qld.gov.au/masterview/modules/ApplicationMaster/default.aspx?page=found&1=' +period+ '&4a=BLD%27,%27MCU%27,%27OPW%27,%27ROL&6=F'
-comment_url = 'mailto:gcccmail@goldcoast.qld.gov.au'
+class WollongongScraper
+  attr_reader :agent
 
-def clean_whitespace(a)
-  a.gsub("\r", ' ').gsub("\n", ' ').squeeze(" ").strip
-end
+  def initialize
+    @agent = Mechanize.new
+  end
 
-# Extending Mechanize Form to support doPostBack
-# http://scraperblog.blogspot.com.au/2012/10/asp-forms-with-dopostback-using-ruby.html
-class Mechanize::Form
-  def postback target, argument
-    self['__EVENTTARGET'], self['__EVENTARGUMENT'] = target, argument
-    submit
+  def extract_urls_from_page(page)
+    content = page.at('table.ContentPanel')
+    if content
+      content.search('tr')[1..-1].map do |app|
+        (page.uri + app.search('td')[0].at('a')["href"]).to_s
+      end
+    else
+      []
+    end
+  end
+
+  # The main url for the planning system which can be reached directly without getting a stupid session timed out error
+  def enquiry_url
+    "http://epathway.wollongong.nsw.gov.au/ePathway/Production/Web/GeneralEnquiry/EnquiryLists.aspx"
+  end
+
+  # Returns a list of URLs for all the applications on exhibition
+  def urls
+    # Get the main page and ask for the list of DAs on exhibition
+    page = agent.get(enquiry_url)
+    form = page.forms.first
+    form.radiobuttons[0].click
+    page = form.submit(form.button_with(:value => /Save and Continue/))
+
+    page_label = page.at('#ctl00_MainBodyContent_mPagingControl_pageNumberLabel')
+    if page_label.nil?
+      # If we can't find the label assume there is only one page of results
+      number_of_pages = 1
+    elsif page_label.inner_text =~ /Page \d+ of (\d+)/
+      number_of_pages = $~[1].to_i
+    else
+      raise "Unexpected form for number of pages"
+    end
+    urls = []
+    (1..number_of_pages).each do |page_no|
+      # Don't refetch the first page
+      if page_no > 1
+        page = agent.get("http://epathway.wollongong.nsw.gov.au/ePathway/Production/Web/GeneralEnquiry/EnquirySummaryView.aspx?PageNumber=#{page_no}")
+      end
+      # Get a list of urls on this page
+      urls += extract_urls_from_page(page)
+    end
+    urls
+  end
+
+  def applications
+    urls.map do |url|
+      # Get application page with a referrer or we get an error page
+      page = agent.get(url, [], URI.parse(enquiry_url))
+
+      results = page.search('#ctl00_MainBodyContent_group_122').search('div.field')
+
+      council_reference = results.search('span[contains("Application Number")] ~ td').text
+      date_received     = Date.strptime(results.search('span[contains("Lodgement Date")] ~ td').text, '%d/%m/%Y').to_s
+      description       = results.search('span[contains("Proposal")] ~ td').text
+
+      address = page.search('#ctl00_MainBodyContent_group_124').search('tr.ContentPanel').search('span.ContentText')[0].text.strip
+
+      record = {
+        "council_reference" => council_reference,
+        "address" => address,
+        "description" => description,
+        "info_url" => enquiry_url,
+        "comment_url" => 'mailto:council@wollongong.nsw.gov.au',
+        "date_scraped" => Date.today.to_s,
+        "date_received" => date_received
+      }
+      #p record
+      puts "Saving record " + record['council_reference'] + " - " + record['address']
+      ScraperWiki.save_sqlite(['council_reference'], record)
+    end
   end
 end
 
-def scrape_table(doc, comment_url)
-  doc.search('table tbody tr').each do |tr|
-    # Columns in table
-    # Show  Number  Submitted  Details
-    tds = tr.search('td')
-    h = tds.map{|td| td.inner_html}
-
-    record = {
-      'council_reference' => clean_whitespace(h[1]),
-      'address' => clean_whitespace(tds[3].at('b').inner_text) + ' QLD',
-      'description' => CGI::unescapeHTML(clean_whitespace(h[3].split('<br>')[1..-1].join.gsub(/<\/?b>/,''))),
-      'info_url' => (doc.uri + tds[0].at('a')['href']).to_s,
-      'comment_url' => comment_url,
-      'date_scraped' => Date.today.to_s,
-      'date_received' => Date.strptime(clean_whitespace(h[2]), '%d/%m/%Y').to_s
-    }
-
-    puts "Saving record " + record['council_reference'] + ", " + record['address']
-#       puts record
-    ScraperWiki.save_sqlite(['council_reference'], record)
-  end
-end
-
-
-agent = Mechanize.new
-doc = agent.get(starting_url)
-
-scrape_table(doc, comment_url)
-
-# Is there more than a page?
-begin
-  totalPages = doc.at('div .rgInfoPart').inner_text.split(' items in ')[1].split(' pages')[0].to_i
-rescue
-  totalPages = 1
-end
-
-# run a loop if there are more than a page
-(2..totalPages).each do |i|
-  puts "scraping for page " + i.to_s + " of " + totalPages.to_s + " pages"
-
-  nextButton = doc.at('.rgPageNext')
-  target, argument = nextButton[:onclick].scan(/'([^']*)'/).flatten
-  doc = doc.form.postback target, argument
-  scrape_table(doc, comment_url)
-  i += i
-end
+WollongongScraper.new.applications
