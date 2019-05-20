@@ -7,15 +7,9 @@ class GoldCoastScraper
     @agent = Mechanize.new
   end
 
-  def extract_urls_from_page(page)
-    content = page.at('table.ContentPanel')
-    if content
-      content.search('tr')[1..-1].map do |app|
-        (page.uri + app.search('td')[0].at('a')["href"]).to_s
-      end
-    else
-      []
-    end
+  def extract_urls_from_page(page, scraper)
+    table = page.at('table.ContentPanel')
+    scraper.extract_table_data_and_urls(table).map { |row| row[:url] }
   end
 
   # Returns a list of URLs for all the applications on exhibition
@@ -27,7 +21,7 @@ class GoldCoastScraper
     (1..number_of_pages).each do |page_no|
       page = scraper.agent.get("EnquirySummaryView.aspx?PageNumber=#{page_no}")
       # Get a list of urls on this page
-      urls += extract_urls_from_page(page)
+      urls += extract_urls_from_page(page, scraper)
     end
     urls
   end
