@@ -23,6 +23,18 @@ class GoldCoastScraper
     "https://cogc.cloud.infor.com/ePathway/epthprod/Web/GeneralEnquiry/EnquiryLists.aspx?ModuleCode=LAP"
   end
 
+  def extract_total_number_of_pages(page)
+    page_label = page.at('#ctl00_MainBodyContent_mPagingControl_pageNumberLabel')
+    if page_label.nil?
+      # If we can't find the label assume there is only one page of results
+      1
+    elsif page_label.inner_text =~ /Page \d+ of (\d+)/
+      $~[1].to_i
+    else
+      raise "Unexpected form for number of pages"
+    end
+  end
+
   # Returns a list of URLs for all the applications on exhibition
   def urls
     # Get the main page and ask for the list of DAs on exhibition
@@ -31,15 +43,7 @@ class GoldCoastScraper
     form.radiobuttons[1].click
     page = form.submit(form.button_with(:value => /Next/))
 
-    page_label = page.at('#ctl00_MainBodyContent_mPagingControl_pageNumberLabel')
-    if page_label.nil?
-      # If we can't find the label assume there is only one page of results
-      number_of_pages = 1
-    elsif page_label.inner_text =~ /Page \d+ of (\d+)/
-      number_of_pages = $~[1].to_i
-    else
-      raise "Unexpected form for number of pages"
-    end
+    number_of_pages = extract_total_number_of_pages(page)
     urls = []
     (1..number_of_pages).each do |page_no|
       page = agent.get("EnquirySummaryView.aspx?PageNumber=#{page_no}")
