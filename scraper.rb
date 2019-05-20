@@ -17,7 +17,9 @@ class GoldCoastScraper
       page = scraper.agent.get("EnquirySummaryView.aspx?PageNumber=#{page_no}")
       table = page.at('table.ContentPanel')
       # Get a list of urls on this page
-      urls += scraper.extract_table_data_and_urls(table).map { |row| row[:url] }
+      urls += scraper.extract_table_data_and_urls(table).map do |row|
+        scraper.extract_index_data(row)[:detail_url]
+      end
     end
     urls
   end
