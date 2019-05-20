@@ -44,7 +44,7 @@ class GoldCoastScraper
     (1..number_of_pages).each do |page_no|
       # Don't refetch the first page
       if page_no > 1
-        page = agent.get("https://cogc.cloud.infor.com/ePathway/epthprod/Web/GeneralEnquiry/EnquirySummaryView.aspx?PageNumber=#{page_no}")
+        page = agent.get("EnquirySummaryView.aspx?PageNumber=#{page_no}")
       end
       # Get a list of urls on this page
       urls += extract_urls_from_page(page)
