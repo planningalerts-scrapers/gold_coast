@@ -18,23 +18,14 @@ class GoldCoastScraper
     end
   end
 
-  # The main url for the planning system which can be reached directly without getting a stupid session timed out error
-  def enquiry_url
-    "https://cogc.cloud.infor.com/ePathway/epthprod/Web/GeneralEnquiry/EnquiryLists.aspx?ModuleCode=LAP"
-  end
-
   # Returns a list of URLs for all the applications on exhibition
   def urls(scraper)
-    # Get the main page and ask for the list of DAs on exhibition
-    page = agent.get(enquiry_url)
-    form = page.forms.first
-    form.radiobuttons[1].click
-    page = form.submit(form.button_with(:value => /Next/))
+    page = scraper.pick_type_of_search(:advertising)
 
     number_of_pages = scraper.extract_total_number_of_pages(page)
     urls = []
     (1..number_of_pages).each do |page_no|
-      page = agent.get("EnquirySummaryView.aspx?PageNumber=#{page_no}")
+      page = scraper.agent.get("EnquirySummaryView.aspx?PageNumber=#{page_no}")
       # Get a list of urls on this page
       urls += extract_urls_from_page(page)
     end
@@ -42,10 +33,10 @@ class GoldCoastScraper
   end
 
   def applications
-    scraper = EpathwayScraper::Scraper.new("")
+    scraper = EpathwayScraper::Scraper.new("https://cogc.cloud.infor.com/ePathway/epthprod")
     urls(scraper).map do |url|
       # Get application page with a referrer or we get an error page
-      page = agent.get(url, [], URI.parse(enquiry_url))
+      page = agent.get(url, [], URI.parse(scraper.base_url))
       data = scraper.scrape_detail_page(page)
 
       record = {
@@ -53,7 +44,7 @@ class GoldCoastScraper
         # Throw away the first part of the address which contains lot number
         "address" => data[:address].split(", ")[1..-1].join(", "),
         "description" => data[:description],
-        "info_url" => enquiry_url,
+        "info_url" => scraper.base_url,
         "date_scraped" => Date.today.to_s,
         "date_received" => data[:date_received]
       }
