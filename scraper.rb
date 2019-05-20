@@ -29,17 +29,14 @@ class GoldCoastScraper
     page = scraper.pick_type_of_search(:advertising)
 
     number_of_pages = scraper.extract_total_number_of_pages(page)
-    urls = []
     (1..number_of_pages).each do |page_no|
       page = scraper.agent.get("EnquirySummaryView.aspx?PageNumber=#{page_no}")
       table = page.at('table.ContentPanel')
       # Get a list of urls on this page
-      urls += scraper.extract_table_data_and_urls(table).map do |row|
-        scraper.extract_index_data(row)[:detail_url]
+      scraper.extract_table_data_and_urls(table).each do |row|
+        url = scraper.extract_index_data(row)[:detail_url]
+        scrape_detail_page(url, scraper)
       end
-    end
-    urls.map do |url|
-      scrape_detail_page(url, scraper)
     end
   end
 end
