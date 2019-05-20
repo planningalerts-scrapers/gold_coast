@@ -1,44 +1,12 @@
 require "epathway_scraper"
 
-class GoldCoastScraper
-  attr_reader :agent
+scraper = EpathwayScraper::Scraper.new("https://cogc.cloud.infor.com/ePathway/epthprod")
+page = scraper.pick_type_of_search(:advertising)
 
-  def initialize
-    @agent = Mechanize.new
-  end
+number_of_pages = scraper.extract_total_number_of_pages(page)
 
-  def scrape_detail_page(url, scraper)
-    # Get application page with a referrer or we get an error page
-    page = agent.get(url, [], URI.parse(scraper.base_url))
-    data = scraper.scrape_detail_page(page)
-
-    record = {
-      "council_reference" => data[:council_reference],
-      # Throw away the first part of the address which contains lot number
-      "address" => data[:address].split(", ")[1..-1].join(", "),
-      "description" => data[:description],
-      "info_url" => scraper.base_url,
-      "date_scraped" => Date.today.to_s,
-      "date_received" => data[:date_received]
-    }
-    EpathwayScraper.save(record)
-  end
-
-  def applications
-    scraper = EpathwayScraper::Scraper.new("https://cogc.cloud.infor.com/ePathway/epthprod")
-    page = scraper.pick_type_of_search(:advertising)
-
-    number_of_pages = scraper.extract_total_number_of_pages(page)
-    (1..number_of_pages).each do |page_no|
-      page = scraper.agent.get("EnquirySummaryView.aspx?PageNumber=#{page_no}")
-      table = page.at('table.ContentPanel')
-      # Get a list of urls on this page
-      scraper.extract_table_data_and_urls(table).each do |row|
-        url = scraper.extract_index_data(row)[:detail_url]
-        scrape_detail_page(url, scraper)
-      end
-    end
-  end
+scraper.scrape_all_index_pages_with_gets(number_of_pages) do |record|
+  # Throw away the first part of the address which contains lot number
+  record["address"] = record["address"].split(", ")[1..-1].join(", ")
+  EpathwayScraper.save(record)
 end
-
-GoldCoastScraper.new.applications
