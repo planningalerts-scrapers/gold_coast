@@ -7,8 +7,8 @@ class GoldCoastScraper
     @agent = Mechanize.new
   end
 
-  # Returns a list of URLs for all the applications on exhibition
-  def urls(scraper)
+  def applications
+    scraper = EpathwayScraper::Scraper.new("https://cogc.cloud.infor.com/ePathway/epthprod")
     page = scraper.pick_type_of_search(:advertising)
 
     number_of_pages = scraper.extract_total_number_of_pages(page)
@@ -21,12 +21,7 @@ class GoldCoastScraper
         scraper.extract_index_data(row)[:detail_url]
       end
     end
-    urls
-  end
-
-  def applications
-    scraper = EpathwayScraper::Scraper.new("https://cogc.cloud.infor.com/ePathway/epthprod")
-    urls(scraper).map do |url|
+    urls.map do |url|
       # Get application page with a referrer or we get an error page
       page = agent.get(url, [], URI.parse(scraper.base_url))
       data = scraper.scrape_detail_page(page)
