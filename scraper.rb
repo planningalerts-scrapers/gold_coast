@@ -1,7 +1,4 @@
-require "mechanize"
-require 'scraperwiki'
-
-# This is using the ePathway system.
+require "epathway_scraper"
 
 class GoldCoastScraper
   attr_reader :agent
@@ -56,28 +53,22 @@ class GoldCoastScraper
   end
 
   def applications
+    scraper = EpathwayScraper::Scraper.new("")
     urls.map do |url|
       # Get application page with a referrer or we get an error page
       page = agent.get(url, [], URI.parse(enquiry_url))
-      results = page.at('.GroupContentPanel').search('div.field')
+      data = scraper.scrape_detail_page(page)
 
-      council_reference = results.at('span[contains("Application number")]').next.text
-      date_received     = Date.strptime(results.at('span[contains("Lodgement date")]').next.text, '%d/%m/%Y').to_s
-      description       = results.at('span[contains("Application description")]').next.text
-
-      address = results.at('span[contains("Application location")]').next.text
-      # Throw away the first part of the address which contains lot number
-      address = address.split(", ")[1..-1].join(", ")
       record = {
-        "council_reference" => council_reference,
-        "address" => address,
-        "description" => description,
+        "council_reference" => data[:council_reference],
+        # Throw away the first part of the address which contains lot number
+        "address" => data[:address].split(", ")[1..-1].join(", "),
+        "description" => data[:description],
         "info_url" => enquiry_url,
         "date_scraped" => Date.today.to_s,
-        "date_received" => date_received
+        "date_received" => data[:date_received]
       }
-      puts "Saving record " + record['council_reference'] + " - " + record['address']
-      ScraperWiki.save_sqlite(['council_reference'], record)
+      EpathwayScraper.save(record)
     end
   end
 end
