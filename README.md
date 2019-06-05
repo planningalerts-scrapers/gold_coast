@@ -1,6 +1,1 @@
-# City of Gold Coast Council Scraper
-
-This Council involves the followings
-
-* Server - ePathway
-* Scrape detail page - Yes
+This scraper has been merged in to https://github.com/planningalerts-scrapers/multiple_epathway_scraper
